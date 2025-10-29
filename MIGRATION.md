@@ -227,7 +227,7 @@ Test file: `examples/nfl.csv` (1.36 MB)
 | Implementation | Throughput | Notes |
 |----------------|-----------|--------|
 | C++ (GCC 13)   | ~5.5 GB/s | Baseline |
-| Rust (rustc)   | ~4.0 GB/s | 73% of C++ performance |
+| Rust (rustc)   | ~4.0 GB/s | ~73% of C++ performance |
 
 The performance gap is primarily due to:
 1. Different compiler optimization strategies (GCC vs LLVM)
@@ -293,8 +293,8 @@ When adding features, maintain compatibility with both versions when possible:
 
 ### Known Limitations
 
-1. **Performance Gap**: 73% of C++ performance (could be improved)
-2. **CRLF Support**: Not currently enabled (line 169 in C++ has `#ifdef CRLF`)
+1. **Performance Gap**: ~73% of C++ performance (could be improved with further tuning)
+2. **CRLF Support**: The C++ version has conditional support for CR-LF line endings that is not currently enabled in the Rust version
 3. **Tail Handling**: The Rust version processes the tail with scalar code; the C++ version relies on padding
 
 ## Questions and Support

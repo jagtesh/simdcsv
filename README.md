@@ -146,7 +146,7 @@ The codebase has been migrated from C++ to Rust with the following improvements:
 ### Performance Comparison
 - **C++ baseline**: ~5.5 GB/s on x86_64 with AVX2
 - **Rust implementation**: ~4.0 GB/s on x86_64 with AVX2
-- The ~30% gap is primarily due to different compiler optimizations and could be closed with additional tuning
+- The ~27% performance gap is primarily due to different compiler optimizations and could be closed with additional tuning
 
 ## References
 
