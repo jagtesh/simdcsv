@@ -162,61 +162,61 @@ unsafe fn find_quote_mask(input: SimdInput, prev_iter_inside_quote: &mut u64) ->
     quote_mask
 }
 
-/// Flatten bits into indexes
+/// Flatten bits into indexes (optimized for performance)
 #[inline(always)]
 fn flatten_bits(base_ptr: &mut Vec<u32>, idx: u32, mut bits: u64) {
     if bits == 0 {
         return;
     }
 
-    let cnt = hamming(bits);
+    let cnt = hamming(bits) as usize;
     
-    // Unrolled loop for first 8 bits
-    if cnt > 0 {
-        base_ptr.push(idx + trailing_zeros(bits));
-        bits &= bits - 1;
-    }
-    if cnt > 1 {
-        base_ptr.push(idx + trailing_zeros(bits));
-        bits &= bits - 1;
-    }
-    if cnt > 2 {
-        base_ptr.push(idx + trailing_zeros(bits));
-        bits &= bits - 1;
-    }
-    if cnt > 3 {
-        base_ptr.push(idx + trailing_zeros(bits));
-        bits &= bits - 1;
-    }
-    if cnt > 4 {
-        base_ptr.push(idx + trailing_zeros(bits));
-        bits &= bits - 1;
-    }
-    if cnt > 5 {
-        base_ptr.push(idx + trailing_zeros(bits));
-        bits &= bits - 1;
-    }
-    if cnt > 6 {
-        base_ptr.push(idx + trailing_zeros(bits));
-        bits &= bits - 1;
-    }
-    if cnt > 7 {
-        base_ptr.push(idx + trailing_zeros(bits));
-        bits &= bits - 1;
-    }
+    // Reserve at least 8 to allow unconditional writes in fast path
+    // This matches C++ approach of writing to pre-allocated array
+    let current_len = base_ptr.len();
+    base_ptr.reserve(cnt.max(8));
     
-    // Continue for 9-16 bits
-    if cnt > 8 {
-        for _ in 8..cnt.min(16) {
-            base_ptr.push(idx + trailing_zeros(bits));
-            bits &= bits - 1;
+    // SAFETY: We reserved at least 8 elements, so writing first 8 is safe.
+    // Only cnt elements will be exposed via set_len.
+    unsafe {
+        let ptr = base_ptr.as_mut_ptr().add(current_len);
+        
+        // Unconditionally write first 8 (branchless fast path)
+        // These writes may produce garbage values if cnt < 8, but only cnt
+        // elements will be made visible by set_len
+        *ptr.add(0) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
+        *ptr.add(1) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
+        *ptr.add(2) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
+        *ptr.add(3) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
+        *ptr.add(4) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
+        *ptr.add(5) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
+        *ptr.add(6) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
+        *ptr.add(7) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
+        
+        // Process 9-16 if needed
+        if cnt > 8 {
+            *ptr.add(8) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
+            *ptr.add(9) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
+            *ptr.add(10) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
+            *ptr.add(11) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
+            *ptr.add(12) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
+            *ptr.add(13) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
+            *ptr.add(14) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
+            *ptr.add(15) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
         }
-    }
-    
-    // Handle remaining bits
-    while bits != 0 && cnt > 16 {
-        base_ptr.push(idx + trailing_zeros(bits));
-        bits &= bits - 1;
+        
+        // Handle remaining > 16
+        if cnt > 16 {
+            let mut offset = 16;
+            while bits != 0 {
+                *ptr.add(offset) = idx + trailing_zeros(bits);
+                bits &= bits - 1;
+                offset += 1;
+            }
+        }
+        
+        // Only expose cnt valid elements (garbage values are not visible)
+        base_ptr.set_len(current_len + cnt);
     }
 }
 

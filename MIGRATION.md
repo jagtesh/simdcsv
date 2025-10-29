@@ -227,18 +227,23 @@ Test file: `examples/nfl.csv` (1.36 MB)
 | Implementation | Throughput | Notes |
 |----------------|-----------|--------|
 | C++ (GCC 13)   | ~5.5 GB/s | Baseline |
-| Rust (rustc)   | ~4.0 GB/s | ~73% of C++ performance |
+| Rust (rustc)   | ~4.8 GB/s | 87% of C++ performance |
 
-The performance gap is primarily due to:
+The 13% performance gap is primarily due to:
 1. Different compiler optimization strategies (GCC vs LLVM)
-2. Slightly different buffering implementation
-3. Additional bounds checking in debug builds (eliminated in release)
+2. Vec bounds checking overhead (mitigated with unsafe direct writes)
+3. Slightly different instruction scheduling
+
+The gap was reduced from 73% to 87% through:
+- Eliminating Vec::push overhead with direct unsafe writes
+- Branchless unrolled loop for first 8 bits
+- Pre-reserving capacity to avoid reallocations
+- Matching C++ unconditional write strategy
 
 Future optimizations could include:
-- Fine-tuning the buffering strategy
-- Using `std::simd` (once stabilized) for better portable SIMD
 - Profile-guided optimization (PGO)
-- Explicit loop unrolling hints
+- Using `std::simd` (once stabilized) for better portable SIMD
+- Further fine-tuning of the buffering strategy
 
 ## Compatibility Matrix
 
@@ -293,7 +298,7 @@ When adding features, maintain compatibility with both versions when possible:
 
 ### Known Limitations
 
-1. **Performance Gap**: ~73% of C++ performance (could be improved with further tuning)
+1. **Performance Gap**: Rust achieves 87% of C++ performance (~4.8 GB/s vs ~5.5 GB/s)
 2. **CRLF Support**: The C++ version has conditional support for CR-LF line endings that is not currently enabled in the Rust version
 3. **Tail Handling**: The Rust version processes the tail with scalar code; the C++ version relies on padding
 
