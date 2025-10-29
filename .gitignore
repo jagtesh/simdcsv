@@ -30,3 +30,17 @@
 *.exe
 *.out
 *.app
+
+# Build directories
+build/
+bin/
+
+# Rust artifacts
+target/
+Cargo.lock
+**/*.rs.bk
+
+
+# Added by cargo
+
+/target

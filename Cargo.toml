@@ -1,0 +1,34 @@
+[package]
+name = "simdcsv"
+version = "0.1.0"
+edition = "2021"
+authors = ["Jagtesh Chadha"]
+license = "MIT"
+description = "A fast SIMD parser for CSV files as defined by RFC 4180"
+readme = "README.md"
+repository = "https://github.com/jagtesh/simdcsv"
+keywords = ["csv", "simd", "parser", "performance"]
+categories = ["parsing", "text-processing"]
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+
+[target.'cfg(target_arch = "aarch64")'.dependencies]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+
+[profile.bench]
+inherits = "release"
+
+[lib]
+name = "simdcsv"
+path = "src/lib.rs"
+
+[[bin]]
+name = "simdcsv"
+path = "src/main.rs"
