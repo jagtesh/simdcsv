@@ -1,3 +1,0 @@
-/home/runner/work/simdcsv/simdcsv/_codeql_build_dir/CMakeFiles/simdcsv.dir
-/home/runner/work/simdcsv/simdcsv/_codeql_build_dir/CMakeFiles/edit_cache.dir
-/home/runner/work/simdcsv/simdcsv/_codeql_build_dir/CMakeFiles/rebuild_cache.dir
