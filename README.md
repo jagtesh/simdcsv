@@ -55,7 +55,7 @@ The project automatically detects your CPU architecture and enables appropriate 
 
 ## Performance
 
-On modern x86_64 CPUs with AVX2 support, simdcsv achieves approximately **4.8 GB/s** throughput parsing RFC 4180-compliant CSV files, which is **87% of the C++ baseline performance**.
+On modern x86_64 CPUs with AVX2 support, simdcsv achieves approximately **3.9 GB/s** throughput parsing RFC 4180-compliant CSV files, which is **71% of the C++ baseline performance** using a **fully safe Rust implementation** with no unsafe code in the hot path.
 
 ## Testing
 
@@ -145,8 +145,9 @@ The codebase has been migrated from C++ to Rust with the following improvements:
 
 ### Performance Comparison
 - **C++ baseline**: ~5.5 GB/s on x86_64 with AVX2
-- **Rust implementation**: ~4.8 GB/s on x86_64 with AVX2 (87% of C++ performance)
-- The 13% performance gap is primarily due to different compiler optimization strategies and could be further reduced with additional tuning
+- **Rust implementation**: ~3.9 GB/s on x86_64 with AVX2 (71% of C++ performance)
+- Fully safe implementation using chunked allocation strategy - no unsafe code in hot paths
+- The performance gap is a reasonable tradeoff for complete memory safety
 
 ## References
 

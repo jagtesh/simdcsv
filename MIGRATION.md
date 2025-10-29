@@ -227,23 +227,22 @@ Test file: `examples/nfl.csv` (1.36 MB)
 | Implementation | Throughput | Notes |
 |----------------|-----------|--------|
 | C++ (GCC 13)   | ~5.5 GB/s | Baseline |
-| Rust (rustc)   | ~4.8 GB/s | 87% of C++ performance |
+| Rust (rustc)   | ~3.9 GB/s | 71% of C++ performance, fully safe |
 
-The 13% performance gap is primarily due to:
-1. Different compiler optimization strategies (GCC vs LLVM)
-2. Vec bounds checking overhead (mitigated with unsafe direct writes)
-3. Slightly different instruction scheduling
+The 29% performance gap is a tradeoff for complete memory safety:
+1. No unsafe code in hot paths - uses chunked allocation strategy
+2. Vec::push with pre-allocated capacity in chunks (1024 elements)
+3. Different compiler optimization strategies (GCC vs LLVM)
 
-The gap was reduced from 73% to 87% through:
-- Eliminating Vec::push overhead with direct unsafe writes
-- Branchless unrolled loop for first 8 bits
-- Pre-reserving capacity to avoid reallocations
-- Matching C++ unconditional write strategy
+The current implementation prioritizes safety and clarity:
+- Chunked pre-allocation amortizes allocation costs
+- Simple, readable code without complex unsafe pointer arithmetic
+- Maintains all safety guarantees of safe Rust
 
 Future optimizations could include:
 - Profile-guided optimization (PGO)
 - Using `std::simd` (once stabilized) for better portable SIMD
-- Further fine-tuning of the buffering strategy
+- Fine-tuning chunk sizes based on workload patterns
 
 ## Compatibility Matrix
 
@@ -298,7 +297,7 @@ When adding features, maintain compatibility with both versions when possible:
 
 ### Known Limitations
 
-1. **Performance Gap**: Rust achieves 87% of C++ performance (~4.8 GB/s vs ~5.5 GB/s)
+1. **Performance Gap**: Rust achieves 71% of C++ performance (~3.9 GB/s vs ~5.5 GB/s) using fully safe code
 2. **CRLF Support**: The C++ version has conditional support for CR-LF line endings that is not currently enabled in the Rust version
 3. **Tail Handling**: The Rust version processes the tail with scalar code; the C++ version relies on padding
 

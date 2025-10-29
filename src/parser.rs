@@ -9,15 +9,34 @@ use std::arch::x86_64::*;
 use std::arch::aarch64::*;
 
 /// Parsed CSV structure containing field separator indexes
+/// 
+/// Uses a chunked allocation strategy to amortize allocation costs
+/// and reduce the need for frequent reallocations.
 pub struct ParsedCsv {
     pub indexes: Vec<u32>,
+    chunk_size: usize,
 }
 
 impl ParsedCsv {
     /// Create a new ParsedCsv with pre-allocated capacity
     pub fn with_capacity(capacity: usize) -> Self {
+        // Use a reasonable chunk size for batch allocations
+        let chunk_size = 1024.min(capacity / 4).max(64);
         Self {
             indexes: Vec::with_capacity(capacity),
+            chunk_size,
+        }
+    }
+    
+    /// Ensure we have capacity for at least n more elements
+    /// This amortizes allocation cost by allocating in chunks
+    #[inline(always)]
+    fn ensure_capacity(&mut self, additional: usize) {
+        let available = self.indexes.capacity() - self.indexes.len();
+        if available < additional {
+            // Allocate in chunks to reduce allocation frequency
+            let to_reserve = additional.max(self.chunk_size);
+            self.indexes.reserve(to_reserve);
         }
     }
 }
@@ -162,61 +181,26 @@ unsafe fn find_quote_mask(input: SimdInput, prev_iter_inside_quote: &mut u64) ->
     quote_mask
 }
 
-/// Flatten bits into indexes (optimized for performance)
+/// Flatten bits into indexes (safe, optimized with chunked allocation)
+/// 
+/// Uses pre-allocated capacity and simple push operations for safety.
+/// The chunked allocation strategy in ParsedCsv reduces allocation overhead.
 #[inline(always)]
-fn flatten_bits(base_ptr: &mut Vec<u32>, idx: u32, mut bits: u64) {
+fn flatten_bits(pcsv: &mut ParsedCsv, idx: u32, mut bits: u64) {
     if bits == 0 {
         return;
     }
 
     let cnt = hamming(bits) as usize;
     
-    // Reserve at least 8 to allow unconditional writes in fast path
-    // This matches C++ approach of writing to pre-allocated array
-    let current_len = base_ptr.len();
-    base_ptr.reserve(cnt.max(8));
+    // Ensure we have capacity before pushing
+    pcsv.ensure_capacity(cnt);
     
-    // SAFETY: We reserved at least 8 elements, so writing first 8 is safe.
-    // Only cnt elements will be exposed via set_len.
-    unsafe {
-        let ptr = base_ptr.as_mut_ptr().add(current_len);
-        
-        // Unconditionally write first 8 (branchless fast path)
-        // These writes may produce garbage values if cnt < 8, but only cnt
-        // elements will be made visible by set_len
-        *ptr.add(0) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
-        *ptr.add(1) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
-        *ptr.add(2) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
-        *ptr.add(3) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
-        *ptr.add(4) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
-        *ptr.add(5) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
-        *ptr.add(6) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
-        *ptr.add(7) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
-        
-        // Process 9-16 if needed
-        if cnt > 8 {
-            *ptr.add(8) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
-            *ptr.add(9) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
-            *ptr.add(10) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
-            *ptr.add(11) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
-            *ptr.add(12) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
-            *ptr.add(13) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
-            *ptr.add(14) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
-            *ptr.add(15) = idx + trailing_zeros(bits); bits = bits.wrapping_sub(1) & bits;
-        }
-        
-        // Handle remaining > 16
-        if cnt > 16 {
-            let mut offset = 16;
-            while bits != 0 {
-                *ptr.add(offset) = idx + trailing_zeros(bits);
-                bits &= bits - 1;
-                offset += 1;
-            }
-        }
-        
-        // Only expose cnt valid elements (garbage values are not visible)
-        base_ptr.set_len(current_len + cnt);
+    // Now push without worrying about frequent reallocations
+    // The compiler can optimize these pushes well since capacity is ensured
+    while bits != 0 {
+        pcsv.indexes.push(idx + trailing_zeros(bits));
+        bits &= bits - 1;
     }
 }
 
@@ -264,7 +248,7 @@ pub unsafe fn find_indexes_avx2(buf: &[u8], pcsv: &mut ParsedCsv) -> bool {
             // Flatten all buffered results
             for b in 0..BUFFER_SIZE {
                 let internal_idx = 64 * b + idx;
-                flatten_bits(&mut pcsv.indexes, internal_idx as u32, fields[b]);
+                flatten_bits(pcsv, internal_idx as u32, fields[b]);
             }
             
             idx += 64 * BUFFER_SIZE;
@@ -279,7 +263,7 @@ pub unsafe fn find_indexes_avx2(buf: &[u8], pcsv: &mut ParsedCsv) -> bool {
         let end = cmp_mask_against_input(input, b'\n');
         
         let field_sep = (end | sep) & !quote_mask;
-        flatten_bits(&mut pcsv.indexes, idx as u32, field_sep);
+        flatten_bits(pcsv, idx as u32, field_sep);
         
         idx += 64;
     }
@@ -324,7 +308,7 @@ pub fn find_indexes(buf: &[u8], pcsv: &mut ParsedCsv) -> bool {
             let end = cmp_mask_against_input(input, b'\n');
             
             let field_sep = (end | sep) & !quote_mask;
-            flatten_bits(&mut pcsv.indexes, idx as u32, field_sep);
+            flatten_bits(pcsv, idx as u32, field_sep);
             
             idx += 64;
         }
