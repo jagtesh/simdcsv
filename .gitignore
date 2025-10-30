@@ -30,3 +30,19 @@
 *.exe
 *.out
 *.app
+
+# Build directories
+build/
+bin/
+_codeql_build_dir/
+_codeql_detected_source_root
+
+# Rust artifacts
+target/
+Cargo.lock
+**/*.rs.bk
+
+
+# Added by cargo
+
+/target
