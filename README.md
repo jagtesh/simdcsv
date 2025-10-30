@@ -141,7 +141,7 @@ This project has been fully rewritten in Rust, replacing the original C++ implem
 - Provides complete memory safety while maintaining high throughput
 
 ### Legacy C++ Code
-The original C++ implementation is preserved in the repository for reference and can be built with CMake if needed. The C++ reference achieved ~5.5 GB/s under the same conditions. See [MIGRATION.md](MIGRATION.md) for details on the transition from C++ to Rust and how the codebases correspond.
+The original C++ implementation is preserved in the repository for reference and can be built with CMake if needed. See [MIGRATION.md](MIGRATION.md) for details on the transition from C++ to Rust and how the codebases correspond. The C++ reference achieved ~5.5 GB/s under the same conditions.
 
 **For new users: Use the Rust implementation.** The C++ code is legacy and no longer actively maintained.
 
