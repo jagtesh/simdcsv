@@ -9,7 +9,7 @@ use std::arch::x86_64::*;
 use std::arch::aarch64::*;
 
 /// Parsed CSV structure containing field separator indexes
-/// 
+///
 /// Uses a chunked allocation strategy to amortize allocation costs
 /// and reduce the need for frequent reallocations.
 pub struct ParsedCsv {
@@ -27,7 +27,7 @@ impl ParsedCsv {
             chunk_size,
         }
     }
-    
+
     /// Ensure we have capacity for at least n more elements
     /// This amortizes allocation cost by allocating in chunks
     #[inline(always)]
@@ -116,11 +116,8 @@ unsafe fn neon_movemask_bulk(
     let mask1 = neon_movemask(i1);
     let mask2 = neon_movemask(i2);
     let mask3 = neon_movemask(i3);
-    
-    (mask0 as u64) 
-        | ((mask1 as u64) << 16) 
-        | ((mask2 as u64) << 32) 
-        | ((mask3 as u64) << 48)
+
+    (mask0 as u64) | ((mask1 as u64) << 16) | ((mask2 as u64) << 32) | ((mask3 as u64) << 48)
 }
 
 #[cfg(target_arch = "aarch64")]
@@ -129,11 +126,11 @@ unsafe fn neon_movemask(input: uint8x16_t) -> u16 {
     // Extract high bit from each byte
     let bit_mask = vdupq_n_u8(0x80);
     let masked = vandq_u8(input, bit_mask);
-    
+
     // Use a lookup-based approach to pack bits
     let low = vget_low_u8(masked);
     let high = vget_high_u8(masked);
-    
+
     let mut result = 0u16;
     for i in 0..8 {
         if vget_lane_u8(low, i) != 0 {
@@ -151,19 +148,19 @@ unsafe fn neon_movemask(input: uint8x16_t) -> u16 {
 #[inline(always)]
 unsafe fn find_quote_mask(input: SimdInput, prev_iter_inside_quote: &mut u64) -> u64 {
     let quote_bits = cmp_mask_against_input(input, b'"');
-    
+
     // Use carryless multiply to find quote regions
     let quote_mask = _mm_cvtsi128_si64(_mm_clmulepi64_si128(
         _mm_set_epi64x(0, quote_bits as i64),
         _mm_set1_epi8(-1),
         0,
     )) as u64;
-    
+
     let quote_mask = quote_mask ^ *prev_iter_inside_quote;
-    
+
     // Update for next iteration
     *prev_iter_inside_quote = ((quote_mask as i64) >> 63) as u64;
-    
+
     quote_mask
 }
 
@@ -171,18 +168,18 @@ unsafe fn find_quote_mask(input: SimdInput, prev_iter_inside_quote: &mut u64) ->
 #[inline(always)]
 unsafe fn find_quote_mask(input: SimdInput, prev_iter_inside_quote: &mut u64) -> u64 {
     let quote_bits = cmp_mask_against_input(input, b'"');
-    
+
     // Use polynomial multiplication for ARM
     let quote_mask = vmull_p64(!0u64, quote_bits);
     let quote_mask = quote_mask ^ *prev_iter_inside_quote;
-    
+
     *prev_iter_inside_quote = ((quote_mask as i64) >> 63) as u64;
-    
+
     quote_mask
 }
 
 /// Flatten bits into indexes (safe, optimized with chunked allocation)
-/// 
+///
 /// Uses pre-allocated capacity and simple push operations for safety.
 /// The chunked allocation strategy in ParsedCsv reduces allocation overhead.
 #[inline(always)]
@@ -192,10 +189,10 @@ fn flatten_bits(pcsv: &mut ParsedCsv, idx: u32, mut bits: u64) {
     }
 
     let cnt = hamming(bits) as usize;
-    
+
     // Ensure we have capacity before pushing
     pcsv.ensure_capacity(cnt);
-    
+
     // Now push without worrying about frequent reallocations
     // The compiler can optimize these pushes well since capacity is ensured
     while bits != 0 {
@@ -205,69 +202,77 @@ fn flatten_bits(pcsv: &mut ParsedCsv, idx: u32, mut bits: u64) {
 }
 
 /// Parse CSV buffer and find field separator indexes
+///
+/// # Safety
+///
+/// This function must only be called on x86_64 CPUs that support AVX2 and PCLMULQDQ.
+/// The caller must ensure the buffer is valid and accessible for the duration of the call.
+/// The function uses SIMD intrinsics that require proper CPU feature support.
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
 #[target_feature(enable = "pclmulqdq")]
 pub unsafe fn find_indexes_avx2(buf: &[u8], pcsv: &mut ParsedCsv) -> bool {
     let len = buf.len();
     let mut prev_iter_inside_quote = 0u64;
-    
+
     if len < 64 {
         return true;
     }
-    
+
     let lenminus64 = len - 64;
     let mut idx = 0;
 
     // Buffered processing for better pipelining
     const BUFFER_SIZE: usize = 4;
-    
+
     if lenminus64 > 64 * BUFFER_SIZE {
         let mut fields = [0u64; BUFFER_SIZE];
-        
+
         while idx < lenminus64.saturating_sub(64 * BUFFER_SIZE - 1) {
             // Process BUFFER_SIZE chunks and store results
+            #[allow(clippy::needless_range_loop)]
             for b in 0..BUFFER_SIZE {
                 let internal_idx = 64 * b + idx;
-                
+
                 // Prefetch for next iteration
                 #[cfg(target_arch = "x86_64")]
                 {
                     let prefetch_ptr = buf.as_ptr().add(internal_idx + 128);
                     _mm_prefetch(prefetch_ptr as *const i8, _MM_HINT_T0);
                 }
-                
+
                 let input = fill_input(buf.as_ptr().add(internal_idx));
                 let quote_mask = find_quote_mask(input, &mut prev_iter_inside_quote);
                 let sep = cmp_mask_against_input(input, b',');
                 let end = cmp_mask_against_input(input, b'\n');
-                
+
                 fields[b] = (end | sep) & !quote_mask;
             }
-            
+
             // Flatten all buffered results
+            #[allow(clippy::needless_range_loop)]
             for b in 0..BUFFER_SIZE {
                 let internal_idx = 64 * b + idx;
                 flatten_bits(pcsv, internal_idx as u32, fields[b]);
             }
-            
+
             idx += 64 * BUFFER_SIZE;
         }
     }
-    
+
     // Process remaining chunks
     while idx < lenminus64 {
         let input = fill_input(buf.as_ptr().add(idx));
         let quote_mask = find_quote_mask(input, &mut prev_iter_inside_quote);
         let sep = cmp_mask_against_input(input, b',');
         let end = cmp_mask_against_input(input, b'\n');
-        
+
         let field_sep = (end | sep) & !quote_mask;
         flatten_bits(pcsv, idx as u32, field_sep);
-        
+
         idx += 64;
     }
-    
+
     // Process remaining bytes with scalar fallback
     let in_quote_start = prev_iter_inside_quote != 0;
     process_tail_scalar(&buf[idx..], idx, pcsv, in_quote_start);
@@ -290,12 +295,12 @@ pub fn find_indexes(buf: &[u8], pcsv: &mut ParsedCsv) -> bool {
 pub fn find_indexes(buf: &[u8], pcsv: &mut ParsedCsv) -> bool {
     let len = buf.len();
     let mut prev_iter_inside_quote = 0u64;
-    
+
     if len < 64 {
         process_tail_scalar(buf, 0, pcsv, false);
         return true;
     }
-    
+
     let lenminus64 = len - 64;
     let mut idx = 0;
 
@@ -306,14 +311,14 @@ pub fn find_indexes(buf: &[u8], pcsv: &mut ParsedCsv) -> bool {
             let quote_mask = find_quote_mask(input, &mut prev_iter_inside_quote);
             let sep = cmp_mask_against_input(input, b',');
             let end = cmp_mask_against_input(input, b'\n');
-            
+
             let field_sep = (end | sep) & !quote_mask;
             flatten_bits(pcsv, idx as u32, field_sep);
-            
+
             idx += 64;
         }
     }
-    
+
     // Process remaining bytes with scalar fallback
     let in_quote_start = prev_iter_inside_quote != 0;
     process_tail_scalar(&buf[idx..], idx, pcsv, in_quote_start);
@@ -363,16 +368,16 @@ mod tests {
         for i in 0..20 {
             data.extend_from_slice(format!("field{},value{}\n", i, i).as_bytes());
         }
-        
+
         let pcsv = parse_csv(&data);
-        
+
         // Should find commas and newlines
         assert!(!pcsv.indexes.is_empty());
-        
+
         // Count commas and newlines in data
         let comma_count = data.iter().filter(|&&b| b == b',').count();
         let newline_count = data.iter().filter(|&&b| b == b'\n').count();
-        
+
         // Should find all separators
         assert_eq!(pcsv.indexes.len(), comma_count + newline_count);
     }
@@ -384,17 +389,17 @@ mod tests {
         for i in 0..10 {
             data.extend_from_slice(format!("\"field,{}\",value{}\n", i, i).as_bytes());
         }
-        
+
         let pcsv = parse_csv(&data);
-        
+
         // Should find separators but not commas inside quotes
         assert!(!pcsv.indexes.is_empty());
-        
+
         // There should be fewer indexes than total commas+newlines
         // because commas inside quotes don't count
         let comma_count = data.iter().filter(|&&b| b == b',').count();
         let newline_count = data.iter().filter(|&&b| b == b'\n').count();
-        
+
         assert!(pcsv.indexes.len() < comma_count + newline_count);
     }
 
@@ -407,7 +412,7 @@ mod tests {
 
     #[test]
     fn test_parse_no_separators() {
-        let mut data = vec![b'a'; 100];
+        let data = vec![b'a'; 100];
         let pcsv = parse_csv(&data);
         assert!(pcsv.indexes.is_empty());
     }

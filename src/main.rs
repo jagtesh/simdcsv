@@ -44,11 +44,7 @@ fn main() {
     };
 
     if args.verbose {
-        println!(
-            "[verbose] loaded {} ({} bytes)",
-            args.file,
-            buffer.len()
-        );
+        println!("[verbose] loaded {} ({} bytes)", args.file, buffer.len());
     }
 
     // Warmup run
@@ -66,7 +62,7 @@ fn main() {
 
     // Benchmark runs
     let mut total_time = 0.0;
-    
+
     for _ in 0..args.iterations {
         let start = Instant::now();
         let _ = parse_csv(buffer.data());
@@ -91,7 +87,7 @@ fn main() {
     }
 
     let volume = args.iterations as f64 * buffer.len() as f64;
-    
+
     if args.verbose {
         println!("Total time in (s)          = {:.6}", total_time);
         println!("Number of iterations       = {}", args.iterations);

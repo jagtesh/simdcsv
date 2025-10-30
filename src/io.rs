@@ -1,6 +1,6 @@
 //! I/O utilities for loading CSV files with padding
 
-use crate::memory::{allocate_padded_buffer, aligned_free};
+use crate::memory::{aligned_free, allocate_padded_buffer};
 use std::fs::File;
 use std::io::Read;
 use std::ptr::NonNull;
@@ -55,13 +55,13 @@ impl Drop for PaddedBuffer {
 /// # Returns
 /// A `PaddedBuffer` containing the file data with padding
 pub fn get_corpus(filename: &str, padding: usize) -> Result<PaddedBuffer, String> {
-    let mut file = File::open(filename)
-        .map_err(|e| format!("Could not open file '{}': {}", filename, e))?;
+    let mut file =
+        File::open(filename).map_err(|e| format!("Could not open file '{}': {}", filename, e))?;
 
     let metadata = file
         .metadata()
         .map_err(|e| format!("Could not read file metadata: {}", e))?;
-    
+
     let length = metadata.len() as usize;
 
     let ptr = allocate_padded_buffer(length, padding)?;
@@ -89,17 +89,17 @@ mod tests {
         // Create a temporary file
         let temp_dir = std::env::temp_dir();
         let test_file = temp_dir.join("test_simdcsv.csv");
-        
+
         {
             let mut file = File::create(&test_file).unwrap();
             file.write_all(b"a,b,c\n1,2,3\n4,5,6\n").unwrap();
         }
 
         let buffer = get_corpus(test_file.to_str().unwrap(), 64).unwrap();
-        
+
         assert_eq!(buffer.len(), 18);
         assert_eq!(buffer.data(), b"a,b,c\n1,2,3\n4,5,6\n");
-        
+
         // Cleanup
         std::fs::remove_file(test_file).ok();
     }
@@ -108,17 +108,21 @@ mod tests {
     fn test_padded_buffer_alignment() {
         let temp_dir = std::env::temp_dir();
         let test_file = temp_dir.join("test_alignment.csv");
-        
+
         {
             let mut file = File::create(&test_file).unwrap();
             file.write_all(b"test").unwrap();
         }
 
         let buffer = get_corpus(test_file.to_str().unwrap(), 64).unwrap();
-        
+
         // Check alignment
-        assert_eq!(buffer.as_ptr() as usize % 64, 0, "Buffer should be 64-byte aligned");
-        
+        assert_eq!(
+            buffer.as_ptr() as usize % 64,
+            0,
+            "Buffer should be 64-byte aligned"
+        );
+
         std::fs::remove_file(test_file).ok();
     }
 }
