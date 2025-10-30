@@ -1,10 +1,14 @@
 # Migration Guide: C++ to Rust
 
+> **Status**: This project has been **fully migrated** to Rust. The C++ code is preserved for reference but is **no longer actively maintained**. This guide is provided for historical context and to help C++ developers understand the Rust implementation.
+
 This document provides detailed information about the migration of simdcsv from C++ to Rust.
 
 ## Overview
 
-The simdcsv codebase has been completely rewritten in Rust while preserving all functionality and performance characteristics. The migration was done to:
+The simdcsv codebase has been completely rewritten in Rust while preserving all functionality. **The Rust implementation is now the primary and actively maintained version.** The original C++ code remains in the repository for reference purposes only.
+
+The migration was done to:
 
 1. Improve memory safety and eliminate undefined behavior
 2. Enhance cross-platform compatibility
@@ -181,7 +185,14 @@ unsafe fn fill_input(ptr: *const u8) -> SimdInput {
 
 ## Building Both Versions
 
-### C++ Version
+### Rust Version (Primary - Actively Maintained)
+
+```bash
+cargo build --release
+./target/release/simdcsv examples/nfl.csv
+```
+
+### C++ Version (Legacy - For Reference Only)
 
 ```bash
 mkdir -p build && cd build
@@ -190,24 +201,19 @@ make
 ./simdcsv ../examples/nfl.csv
 ```
 
-### Rust Version
-
-```bash
-cargo build --release
-./target/release/simdcsv examples/nfl.csv
-```
+> **Note**: The C++ version is no longer maintained. Please use the Rust implementation for new projects.
 
 ## Testing
 
-### C++ Version
-The original C++ version had no automated tests. Testing was done manually.
-
-### Rust Version
+### Rust Version (Primary)
 ```bash
 cargo test                     # Run all tests
 cargo test -- --nocapture      # With output
 cargo test test_parse_simple   # Specific test
 ```
+
+### C++ Version (Legacy)
+The original C++ version had no automated tests. Testing was done manually.
 
 ## Performance Considerations
 
@@ -224,12 +230,16 @@ cargo test test_parse_simple   # Specific test
 
 Test file: `examples/nfl.csv` (1.36 MB)
 
-| Implementation | Throughput | Notes |
-|----------------|-----------|--------|
-| C++ (GCC 13)   | ~5.5 GB/s | Baseline |
-| Rust (rustc)   | ~3.9 GB/s | 71% of C++ performance, fully safe |
+| Implementation | Throughput | Status | Notes |
+|----------------|-----------|--------|-------|
+| Rust (rustc)   | ~3.9 GB/s | ✅ **Active** | Fully safe, actively maintained |
+| C++ (GCC 13)   | ~5.5 GB/s | 🔒 **Legacy** | Reference only, not maintained |
 
-The 29% performance gap is a tradeoff for complete memory safety:
+**Performance Notes:**
+- The Rust implementation achieves 71% of the C++ performance (~3.9 GB/s vs ~5.5 GB/s) using fully safe code
+- The 29% performance gap is an acceptable tradeoff for complete memory safety and modern tooling
+
+**Implementation details:**
 1. No unsafe code in hot paths - uses chunked allocation strategy
 2. Vec::push with pre-allocated capacity in chunks (1024 elements)
 3. Different compiler optimization strategies (GCC vs LLVM)
@@ -246,15 +256,23 @@ Future optimizations could include:
 
 ## Compatibility Matrix
 
-| Platform | Architecture | C++ | Rust | Status |
-|----------|-------------|-----|------|--------|
-| Linux    | x86_64      | ✅  | ✅   | Tested |
-| Linux    | ARM64       | ✅  | ✅   | Supported |
-| macOS    | x86_64      | ✅  | ✅   | Should work |
-| macOS    | ARM64 (M1)  | ✅  | ✅   | Should work |
-| Windows  | x86_64      | ✅  | ✅   | Should work |
+| Platform | Architecture | Rust (Active) | C++ (Legacy) | Status |
+|----------|-------------|---------------|--------------|--------|
+| Linux    | x86_64      | ✅            | 🔒           | Rust tested |
+| Linux    | ARM64       | ✅            | 🔒           | Rust supported |
+| macOS    | x86_64      | ✅            | 🔒           | Should work |
+| macOS    | ARM64 (M1)  | ✅            | 🔒           | Should work |
+| Windows  | x86_64      | ✅            | 🔒           | Should work |
 
 ## Contributing
+
+### For New Contributors
+
+**Use the Rust implementation** - it is the actively maintained version. The Rust version:
+- Has comprehensive tests (unlike the C++ version)
+- Follows modern best practices
+- Provides memory safety guarantees
+- Has excellent tooling (cargo, rustfmt, clippy)
 
 ### For C++ Developers
 
@@ -276,12 +294,12 @@ The Rust version follows standard Rust conventions:
 
 ### Adding New Features
 
-When adding features, maintain compatibility with both versions when possible:
+When adding features:
 
-1. Implement in Rust first
+1. Implement in Rust (the active implementation)
 2. Write tests
 3. Update documentation
-4. Consider backporting to C++ if needed
+4. The C++ code is legacy - no need to backport
 
 ## Future Work
 
@@ -291,15 +309,15 @@ When adding features, maintain compatibility with both versions when possible:
 2. **AVX-512 Support**: Add AVX-512 implementations for newer CPUs
 3. **Streaming API**: Add support for streaming large files
 4. **Multi-threading**: Parallelize parsing across multiple cores
-5. **CR-LF Support**: The C++ version has conditional CRLF support that could be enabled
+5. **CR-LF Support**: Conditional CRLF support (available in the C++ reference) could be enabled
 6. **Field Extraction**: Add helpers to extract and parse field values
 7. **Schema Validation**: Type checking for CSV columns
 
-### Known Limitations
+### Current Implementation Notes
 
-1. **Performance Gap**: Rust achieves 71% of C++ performance (~3.9 GB/s vs ~5.5 GB/s) using fully safe code
-2. **CRLF Support**: The C++ version has conditional support for CR-LF line endings that is not currently enabled in the Rust version
-3. **Tail Handling**: The Rust version processes the tail with scalar code; the C++ version relies on padding
+1. **Performance**: Rust achieves ~3.9 GB/s vs ~5.5 GB/s for the C++ reference, using fully safe code
+2. **CRLF Support**: Conditional support for CR-LF line endings is not currently enabled (available in C++ reference)
+3. **Tail Handling**: Processes the tail with scalar code (the C++ reference relied on padding)
 
 ## Questions and Support
 
@@ -311,4 +329,4 @@ For questions about the migration or Rust implementation:
 
 ## License
 
-Both C++ and Rust versions are licensed under MIT.
+Both Rust (active) and C++ (legacy reference) versions are licensed under MIT.
