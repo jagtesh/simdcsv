@@ -206,8 +206,12 @@ fn flatten_bits(pcsv: &mut ParsedCsv, idx: u32, mut bits: u64) {
 /// # Safety
 ///
 /// This function must only be called on x86_64 CPUs that support AVX2 and PCLMULQDQ.
-/// The caller must ensure the buffer is valid and accessible for the duration of the call.
+/// The caller must ensure:
+/// - The buffer is valid and accessible for the duration of the call
+/// - The buffer is properly aligned for SIMD operations
+///
 /// The function uses SIMD intrinsics that require proper CPU feature support.
+/// Note: Buffers with less than 64 bytes are handled separately by the scalar fallback.
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
 #[target_feature(enable = "pclmulqdq")]
