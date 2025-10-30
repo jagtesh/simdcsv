@@ -1,7 +1,10 @@
 # simdcsv
+
 A fast SIMD parser for CSV files as defined by [RFC 4180](https://tools.ietf.org/html/rfc4180).
 
-**Now written in Rust!** This project has been migrated from C++ to Rust to leverage memory safety, better cross-platform support, and LLVM's powerful vectorization capabilities.
+**Written in Rust** for memory safety, cross-platform support, and LLVM's powerful vectorization capabilities.
+
+> **Note**: This project was originally written in C++ and has been completely rewritten in Rust. The C++ code is preserved for reference but is no longer maintained. See [MIGRATION.md](MIGRATION.md) for transition details.
 
 ## Features
 
@@ -55,7 +58,7 @@ The project automatically detects your CPU architecture and enables appropriate 
 
 ## Performance
 
-On modern x86_64 CPUs with AVX2 support, simdcsv achieves approximately **3.9 GB/s** throughput parsing RFC 4180-compliant CSV files, which is **71% of the C++ baseline performance** using a **fully safe Rust implementation** with no unsafe code in the hot path.
+On modern x86_64 CPUs with AVX2 support, simdcsv achieves approximately **3.9 GB/s** throughput parsing RFC 4180-compliant CSV files. This is a **fully safe Rust implementation** with no unsafe code in the hot path, prioritizing memory safety over raw performance.
 
 ## Testing
 
@@ -121,33 +124,27 @@ The Rust implementation leverages LLVM's vectorization capabilities through:
 ### Build Configuration
 The `.cargo/config.toml` automatically sets `-C target-cpu=native` to enable all available CPU features at compile time.
 
-## Migration from C++ to Rust
+## Why Rust?
 
-The codebase has been migrated from C++ to Rust with the following improvements:
+This project has been fully rewritten in Rust, replacing the original C++ implementation. Rust provides:
 
-### Benefits
+### Benefits Over C++
 - **Memory Safety**: No manual memory management, automatic cleanup via RAII (Drop trait)
 - **Cross-Platform**: Better platform abstraction through Rust's standard library
 - **Modern Tooling**: Cargo for dependency management, testing, and building
 - **Error Handling**: Type-safe error handling with Result types
 - **Zero-Cost Abstractions**: Rust's abstractions compile to efficient code
 
-### Migration Notes for Contributors
-- Original C++ code is preserved and can be built with CMake
-- Rust modules correspond to original C++ headers:
-  - `src/portability.rs` ← `src/portability.h`
-  - `src/memory.rs` ← `src/mem_util.h`
-  - `src/io.rs` ← `src/io_util.h` + `src/io_util.cpp`
-  - `src/parser.rs` ← `src/main.cpp` (parser logic)
-  - `src/main.rs` ← `src/main.cpp` (CLI)
-- SIMD intrinsics are accessed through `std::arch` instead of platform headers
-- Timing utilities use `std::time::Instant` instead of perf_event on Linux
-
-### Performance Comparison
-- **C++ baseline**: ~5.5 GB/s on x86_64 with AVX2
-- **Rust implementation**: ~3.9 GB/s on x86_64 with AVX2 (71% of C++ performance)
+### Performance
+- **Rust implementation**: ~3.9 GB/s on x86_64 with AVX2
 - Fully safe implementation using chunked allocation strategy - no unsafe code in hot paths
-- The performance gap is a reasonable tradeoff for complete memory safety
+- Achieves 71% of the original C++ baseline (~5.5 GB/s) while providing complete memory safety
+- The performance tradeoff is reasonable given the safety guarantees
+
+### Legacy C++ Code
+The original C++ implementation is preserved in the repository for reference and can be built with CMake if needed. See [MIGRATION.md](MIGRATION.md) for details on the transition from C++ to Rust and how the codebases correspond.
+
+**For new users: Use the Rust implementation.** The C++ code is legacy and no longer actively maintained.
 
 ## References
 
