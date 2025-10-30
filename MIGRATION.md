@@ -309,15 +309,15 @@ When adding features:
 2. **AVX-512 Support**: Add AVX-512 implementations for newer CPUs
 3. **Streaming API**: Add support for streaming large files
 4. **Multi-threading**: Parallelize parsing across multiple cores
-5. **CR-LF Support**: The C++ version has conditional CRLF support that could be enabled
+5. **CR-LF Support**: Conditional CRLF support that existed in the C++ reference could be enabled
 6. **Field Extraction**: Add helpers to extract and parse field values
 7. **Schema Validation**: Type checking for CSV columns
 
-### Known Limitations
+### Current Implementation Notes
 
-1. **Performance Gap**: Rust achieves 71% of C++ reference performance (~3.9 GB/s vs ~5.5 GB/s) using fully safe code
-2. **CRLF Support**: The C++ reference had conditional support for CR-LF line endings that is not currently enabled in the Rust version
-3. **Tail Handling**: The Rust version processes the tail with scalar code; the C++ reference relied on padding
+1. **Performance**: Rust achieves ~3.9 GB/s vs ~5.5 GB/s for the C++ reference, using fully safe code
+2. **CRLF Support**: Conditional support for CR-LF line endings is not currently enabled (existed in C++ reference)
+3. **Tail Handling**: Processes the tail with scalar code (the C++ reference relied on padding)
 
 ## Questions and Support
 

@@ -138,11 +138,10 @@ This project has been fully rewritten in Rust, replacing the original C++ implem
 ### Performance
 - **Rust implementation**: ~3.9 GB/s on x86_64 with AVX2
 - Fully safe implementation using chunked allocation strategy - no unsafe code in hot paths
-- Achieves 71% of the original C++ baseline (~5.5 GB/s) while providing complete memory safety
-- The performance tradeoff is reasonable given the safety guarantees
+- Provides complete memory safety while maintaining high throughput
 
 ### Legacy C++ Code
-The original C++ implementation is preserved in the repository for reference and can be built with CMake if needed. See [MIGRATION.md](MIGRATION.md) for details on the transition from C++ to Rust and how the codebases correspond.
+The original C++ implementation is preserved in the repository for reference and can be built with CMake if needed. The C++ reference achieved ~5.5 GB/s under the same conditions. See [MIGRATION.md](MIGRATION.md) for details on the transition from C++ to Rust and how the codebases correspond.
 
 **For new users: Use the Rust implementation.** The C++ code is legacy and no longer actively maintained.
 
