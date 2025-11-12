@@ -132,16 +132,8 @@ The codebase has been migrated from C++ to Rust with the following improvements:
 - **Error Handling**: Type-safe error handling with Result types
 - **Zero-Cost Abstractions**: Rust's abstractions compile to efficient code
 
-### Migration Notes for Contributors
-- Original C++ code is preserved and can be built with CMake
-- Rust modules correspond to original C++ headers:
-  - `src/portability.rs` ← `src/portability.h`
-  - `src/memory.rs` ← `src/mem_util.h`
-  - `src/io.rs` ← `src/io_util.h` + `src/io_util.cpp`
-  - `src/parser.rs` ← `src/main.cpp` (parser logic)
-  - `src/main.rs` ← `src/main.cpp` (CLI)
-- SIMD intrinsics are accessed through `std::arch` instead of platform headers
-- Timing utilities use `std::time::Instant` instead of perf_event on Linux
+### Original C++ Implementation
+The original C++ implementation is available in the git history prior to commit [d23361a](https://github.com/jagtesh/simdcsv/tree/d23361a^). The Rust implementation maintains the same algorithmic approach while leveraging Rust's memory safety guarantees.
 
 ### Performance Comparison
 - **C++ baseline**: ~5.5 GB/s on x86_64 with AVX2
