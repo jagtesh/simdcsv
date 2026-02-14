@@ -327,6 +327,7 @@ pub fn find_indexes(buf: &[u8], pcsv: &mut ParsedCsv) -> bool {
 }
 
 /// Scalar fallback implementation
+#[allow(dead_code)]
 fn find_indexes_fallback(buf: &[u8], pcsv: &mut ParsedCsv) -> bool {
     process_tail_scalar(buf, 0, pcsv, false);
     true
