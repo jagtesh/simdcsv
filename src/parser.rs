@@ -123,24 +123,13 @@ unsafe fn neon_movemask_bulk(
 #[cfg(target_arch = "aarch64")]
 #[inline(always)]
 unsafe fn neon_movemask(input: uint8x16_t) -> u16 {
-    // Extract high bit from each byte
-    let bit_mask = vdupq_n_u8(0x80);
-    let masked = vandq_u8(input, bit_mask);
-
-    // Use a lookup-based approach to pack bits
-    let low = vget_low_u8(masked);
-    let high = vget_high_u8(masked);
-
-    let mut result = 0u16;
-    for i in 0..8 {
-        if vget_lane_u8(low, i) != 0 {
-            result |= 1 << i;
-        }
-        if vget_lane_u8(high, i) != 0 {
-            result |= 1 << (i + 8);
-        }
-    }
-    result
+    // Extract high bit from each byte and pack into u16
+    let mask_data: [u8; 16] = [1, 2, 4, 8, 16, 32, 64, 128, 1, 2, 4, 8, 16, 32, 64, 128];
+    let bit_mask = vld1q_u8(mask_data.as_ptr());
+    let t0 = vandq_u8(input, bit_mask);
+    let low = vget_low_u8(t0);
+    let high = vget_high_u8(t0);
+    (vaddv_u8(low) as u16) | ((vaddv_u8(high) as u16) << 8)
 }
 
 /// Find quote mask using carryless multiplication
@@ -171,11 +160,11 @@ unsafe fn find_quote_mask(input: SimdInput, prev_iter_inside_quote: &mut u64) ->
 
     // Use polynomial multiplication for ARM
     let quote_mask = vmull_p64(!0u64, quote_bits);
-    let quote_mask = quote_mask ^ *prev_iter_inside_quote;
+    let quote_mask_u64 = (quote_mask as u64) ^ *prev_iter_inside_quote;
 
-    *prev_iter_inside_quote = ((quote_mask as i64) >> 63) as u64;
+    *prev_iter_inside_quote = ((quote_mask_u64 as i64) >> 63) as u64;
 
-    quote_mask
+    quote_mask_u64
 }
 
 /// Flatten bits into indexes (safe, optimized with chunked allocation)
@@ -310,6 +299,35 @@ pub fn find_indexes(buf: &[u8], pcsv: &mut ParsedCsv) -> bool {
 
     // Main processing loop
     unsafe {
+        // Buffered processing for better pipelining
+        const BUFFER_SIZE: usize = 4;
+        
+        if lenminus64 > 64 * BUFFER_SIZE {
+            let mut fields = [0u64; BUFFER_SIZE];
+            
+            while idx < lenminus64.saturating_sub(64 * BUFFER_SIZE - 1) {
+                // Process BUFFER_SIZE chunks and store results
+                for b in 0..BUFFER_SIZE {
+                    let internal_idx = 64 * b + idx;
+                    
+                    let input = fill_input(buf.as_ptr().add(internal_idx));
+                    let quote_mask = find_quote_mask(input, &mut prev_iter_inside_quote);
+                    let sep = cmp_mask_against_input(input, b',');
+                    let end = cmp_mask_against_input(input, b'\n');
+                    
+                    fields[b] = (end | sep) & !quote_mask;
+                }
+                
+                // Flatten all buffered results
+                for b in 0..BUFFER_SIZE {
+                    let internal_idx = 64 * b + idx;
+                    flatten_bits(pcsv, internal_idx as u32, fields[b]);
+                }
+                
+                idx += 64 * BUFFER_SIZE;
+            }
+        }
+        
         while idx < lenminus64 {
             let input = fill_input(buf.as_ptr().add(idx));
             let quote_mask = find_quote_mask(input, &mut prev_iter_inside_quote);
