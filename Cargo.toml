@@ -1,9 +1,9 @@
 [package]
 name = "simdcsv"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Jagtesh Chadha"]
-license = "MIT"
+license = "Apache-2.0"
 description = "A fast SIMD parser for CSV files as defined by RFC 4180"
 readme = "README.md"
 repository = "https://github.com/jagtesh/simdcsv"

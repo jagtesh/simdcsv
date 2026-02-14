@@ -107,24 +107,14 @@ unsafe fn neon_movemask_bulk(
 #[cfg(target_arch = "aarch64")]
 #[inline(always)]
 unsafe fn neon_movemask(input: uint8x16_t) -> u16 {
-    // Extract high bit from each byte
-    let bit_mask = vdupq_n_u8(0x80);
-    let masked = vandq_u8(input, bit_mask);
-    
-    // Use a lookup-based approach to pack bits
-    let low = vget_low_u8(masked);
-    let high = vget_high_u8(masked);
-    
-    let mut result = 0u16;
-    for i in 0..8 {
-        if vget_lane_u8(low, i) != 0 {
-            result |= 1 << i;
-        }
-        if vget_lane_u8(high, i) != 0 {
-            result |= 1 << (i + 8);
-        }
-    }
-    result
+    // Extract high bit from each byte and pack into u16
+    // Use a fixed array for the bit mask
+    let mask_data: [u8; 16] = [1, 2, 4, 8, 16, 32, 64, 128, 1, 2, 4, 8, 16, 32, 64, 128];
+    let bit_mask = vld1q_u8(mask_data.as_ptr());
+    let t0 = vandq_u8(input, bit_mask);
+    let low = vget_low_u8(t0);
+    let high = vget_high_u8(t0);
+    (vaddv_u8(low) as u16) | ((vaddv_u8(high) as u16) << 8)
 }
 
 /// Find quote mask using carryless multiplication
@@ -155,11 +145,11 @@ unsafe fn find_quote_mask(input: SimdInput, prev_iter_inside_quote: &mut u64) ->
     
     // Use polynomial multiplication for ARM
     let quote_mask = vmull_p64(!0u64, quote_bits);
-    let quote_mask = quote_mask ^ *prev_iter_inside_quote;
+    let quote_mask_u64 = (quote_mask as u64) ^ *prev_iter_inside_quote;
     
-    *prev_iter_inside_quote = ((quote_mask as i64) >> 63) as u64;
+    *prev_iter_inside_quote = ((quote_mask_u64 as i64) >> 63) as u64;
     
-    quote_mask
+    quote_mask_u64
 }
 
 /// Flatten bits into indexes
@@ -169,9 +159,12 @@ fn flatten_bits(base_ptr: &mut Vec<u32>, idx: u32, mut bits: u64) {
         return;
     }
 
-    let cnt = hamming(bits);
+    let cnt = hamming(bits) as usize;
     
-    // Unrolled loop for first 8 bits
+    // Reserve space once to avoid multiple capacity checks
+    base_ptr.reserve(cnt);
+    
+    // Unrolled loop for efficiency
     if cnt > 0 {
         base_ptr.push(idx + trailing_zeros(bits));
         bits &= bits - 1;
@@ -205,7 +198,6 @@ fn flatten_bits(base_ptr: &mut Vec<u32>, idx: u32, mut bits: u64) {
         bits &= bits - 1;
     }
     
-    // Continue for 9-16 bits
     if cnt > 8 {
         for _ in 8..cnt.min(16) {
             base_ptr.push(idx + trailing_zeros(bits));
@@ -213,10 +205,11 @@ fn flatten_bits(base_ptr: &mut Vec<u32>, idx: u32, mut bits: u64) {
         }
     }
     
-    // Handle remaining bits
-    while bits != 0 && cnt > 16 {
-        base_ptr.push(idx + trailing_zeros(bits));
-        bits &= bits - 1;
+    if cnt > 16 {
+        while bits != 0 {
+            base_ptr.push(idx + trailing_zeros(bits));
+            bits &= bits - 1;
+        }
     }
 }
 
@@ -229,29 +222,24 @@ pub unsafe fn find_indexes_avx2(buf: &[u8], pcsv: &mut ParsedCsv) -> bool {
     let mut prev_iter_inside_quote = 0u64;
     
     if len < 64 {
+        process_tail_scalar(buf, 0, pcsv, false);
         return true;
     }
     
     let lenminus64 = len - 64;
     let mut idx = 0;
 
-    // Buffered processing for better pipelining
     const BUFFER_SIZE: usize = 4;
     
     if lenminus64 > 64 * BUFFER_SIZE {
         let mut fields = [0u64; BUFFER_SIZE];
         
-        while idx < lenminus64.saturating_sub(64 * BUFFER_SIZE - 1) {
-            // Process BUFFER_SIZE chunks and store results
+        while idx <= lenminus64 - 64 * BUFFER_SIZE {
             for b in 0..BUFFER_SIZE {
                 let internal_idx = 64 * b + idx;
                 
-                // Prefetch for next iteration
-                #[cfg(target_arch = "x86_64")]
-                {
-                    let prefetch_ptr = buf.as_ptr().add(internal_idx + 128);
-                    _mm_prefetch(prefetch_ptr as *const i8, _MM_HINT_T0);
-                }
+                let prefetch_ptr = buf.as_ptr().add(internal_idx + 128);
+                _mm_prefetch(prefetch_ptr as *const i8, _MM_HINT_T0);
                 
                 let input = fill_input(buf.as_ptr().add(internal_idx));
                 let quote_mask = find_quote_mask(input, &mut prev_iter_inside_quote);
@@ -261,7 +249,6 @@ pub unsafe fn find_indexes_avx2(buf: &[u8], pcsv: &mut ParsedCsv) -> bool {
                 fields[b] = (end | sep) & !quote_mask;
             }
             
-            // Flatten all buffered results
             for b in 0..BUFFER_SIZE {
                 let internal_idx = 64 * b + idx;
                 flatten_bits(&mut pcsv.indexes, internal_idx as u32, fields[b]);
@@ -271,7 +258,6 @@ pub unsafe fn find_indexes_avx2(buf: &[u8], pcsv: &mut ParsedCsv) -> bool {
         }
     }
     
-    // Process remaining chunks
     while idx < lenminus64 {
         let input = fill_input(buf.as_ptr().add(idx));
         let quote_mask = find_quote_mask(input, &mut prev_iter_inside_quote);
@@ -284,7 +270,6 @@ pub unsafe fn find_indexes_avx2(buf: &[u8], pcsv: &mut ParsedCsv) -> bool {
         idx += 64;
     }
     
-    // Process remaining bytes with scalar fallback
     let in_quote_start = prev_iter_inside_quote != 0;
     process_tail_scalar(&buf[idx..], idx, pcsv, in_quote_start);
 
@@ -315,8 +300,34 @@ pub fn find_indexes(buf: &[u8], pcsv: &mut ParsedCsv) -> bool {
     let lenminus64 = len - 64;
     let mut idx = 0;
 
-    // Main processing loop
+    const BUFFER_SIZE: usize = 4;
+
     unsafe {
+        if lenminus64 > 64 * BUFFER_SIZE {
+            let mut fields = [0u64; BUFFER_SIZE];
+            
+            while idx <= lenminus64 - 64 * BUFFER_SIZE {
+                for b in 0..BUFFER_SIZE {
+                    let internal_idx = 64 * b + idx;
+                    
+                    let input = fill_input(buf.as_ptr().add(internal_idx));
+                    let quote_mask = find_quote_mask(input, &mut prev_iter_inside_quote);
+                    let sep = cmp_mask_against_input(input, b',');
+                    let end = cmp_mask_against_input(input, b'\n');
+                    
+                    fields[b] = (end | sep) & !quote_mask;
+                }
+                
+                for b in 0..BUFFER_SIZE {
+                    let internal_idx = 64 * b + idx;
+                    flatten_bits(&mut pcsv.indexes, internal_idx as u32, fields[b]);
+                }
+                
+                idx += 64 * BUFFER_SIZE;
+            }
+        }
+        
+        // Process remaining chunks
         while idx < lenminus64 {
             let input = fill_input(buf.as_ptr().add(idx));
             let quote_mask = find_quote_mask(input, &mut prev_iter_inside_quote);
@@ -344,6 +355,7 @@ pub fn find_indexes(buf: &[u8], pcsv: &mut ParsedCsv) -> bool {
 }
 
 /// Scalar fallback implementation
+#[allow(dead_code)]
 fn find_indexes_fallback(buf: &[u8], pcsv: &mut ParsedCsv) -> bool {
     process_tail_scalar(buf, 0, pcsv, false);
     true
@@ -423,7 +435,7 @@ mod tests {
 
     #[test]
     fn test_parse_no_separators() {
-        let mut data = vec![b'a'; 100];
+        let data = vec![b'a'; 100];
         let pcsv = parse_csv(&data);
         assert!(pcsv.indexes.is_empty());
     }

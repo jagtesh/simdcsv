@@ -80,7 +80,7 @@ really_inline uint64_t find_quote_mask(simd_input in, uint64_t &prev_iter_inside
   uint64_t quote_mask = _mm_cvtsi128_si64(_mm_clmulepi64_si128(
       _mm_set_epi64x(0ULL, quote_bits), _mm_set1_epi8(0xFF), 0));
 #elif defined(__ARM_NEON)
-  uint64_t quote_mask = vmull_p64( -1ULL, quote_bits);
+  uint64_t quote_mask = (uint64_t)vmull_p64((poly64_t)-1ULL, (poly64_t)quote_bits);
 #endif
   quote_mask ^= prev_iter_inside_quote;
 

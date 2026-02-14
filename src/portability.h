@@ -44,6 +44,22 @@ static inline int hamming(uint64_t input_num) {
 #include <x86intrin.h>
 #endif
 
+#ifdef __ARM_NEON
+#include <arm_neon.h>
+
+static inline uint16_t neonmovemask(uint8x16_t input) {
+    const uint8x16_t bit_mask = {1, 2, 4, 8, 16, 32, 64, 128, 1, 2, 4, 8, 16, 32, 64, 128};
+    uint8x16_t t0 = vandq_u8(input, bit_mask);
+    uint8x8_t low = vget_low_u8(t0);
+    uint8x8_t high = vget_high_u8(t0);
+    return (uint16_t)vaddv_u8(low) | ((uint16_t)vaddv_u8(high) << 8);
+}
+
+static inline uint64_t neonmovemask_bulk(uint8x16_t i0, uint8x16_t i1, uint8x16_t i2, uint8x16_t i3) {
+    return (uint64_t)neonmovemask(i0) | ((uint64_t)neonmovemask(i1) << 16) | ((uint64_t)neonmovemask(i2) << 32) | ((uint64_t)neonmovemask(i3) << 48);
+}
+#endif
+
 static inline bool add_overflow(uint64_t  value1, uint64_t  value2, uint64_t *result) {
 	return __builtin_uaddll_overflow(value1, value2, (unsigned long long*)result);
 }

@@ -1,21 +1,36 @@
 
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.10)
 
-project(simdcsv)
+project(simdcsv CXX)
+
+# Set policies to avoid warnings
+if(POLICY CMP0156)
+  cmake_policy(SET CMP0156 OLD)
+endif()
+if(POLICY CMP0181)
+  cmake_policy(SET CMP0181 OLD)
+endif()
 
 if (NOT CMAKE_BUILD_TYPE)
                 message(STATUS "No build type selected, default to Release")
                 set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
 endif()
 
-set(CMAKE_BINARY_DIR ${CMAKE_SOURCE_DIR}/bin)
+# Set the build directory properly for out-of-source builds
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
 include_directories("${PROJECT_SOURCE_DIR}/src")
 #include_directories("${PROJECT_SOURCE_DIR}/thirdparty")
 
-file(GLOB SOURCES "${PROJECT_SOURCE_DIR}/src/*.cpp")
+set(SOURCES 
+    src/main.cpp
+    src/io_util.cpp
+)
 
 set(CMAKE_CXX_FLAGS                  "-std=c++17 -march=native -Wall -Wextra")
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=armv8-a+crypto")
+endif()
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO   "-O3 -g")
 set(CMAKE_CXX_FLAGS_RELEASE          "-O3")
 set(CMAKE_CXX_FLAGS_DEBUG            "-DDEBUG -O0 -g")
