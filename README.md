@@ -10,7 +10,7 @@ This project is heavily inspired by and adopts techniques from the [simdjson](ht
 
 On an **Apple Silicon computer** (ARM64), benchmarks show:
 
-- **simdcsv (Rust)**: ~3.4 GB/s (Safe Rust implementation)
+- **simdcsv (Rust)**: ~4.3 GB/s (Safe Rust implementation)
 - **Reference (C++)**: ~4.8 GB/s
 
 The Rust implementation achieves competitive performance while maintaining memory safety guarantees for the core logic (outside of essential SIMD intrinsics).

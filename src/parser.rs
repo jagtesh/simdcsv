@@ -298,8 +298,36 @@ pub fn find_indexes(buf: &[u8], pcsv: &mut ParsedCsv) -> bool {
     let mut idx = 0;
 
     // Main processing loop
-    // Uses standard unsafe block only for SIMD intrinsics
     unsafe {
+        // Buffered processing for better pipelining
+        const BUFFER_SIZE: usize = 4;
+        
+        if lenminus64 > 64 * BUFFER_SIZE {
+            let mut fields = [0u64; BUFFER_SIZE];
+            
+            while idx < lenminus64.saturating_sub(64 * BUFFER_SIZE - 1) {
+                // Process BUFFER_SIZE chunks and store results
+                for b in 0..BUFFER_SIZE {
+                    let internal_idx = 64 * b + idx;
+                    
+                    let input = fill_input(buf.as_ptr().add(internal_idx));
+                    let quote_mask = find_quote_mask(input, &mut prev_iter_inside_quote);
+                    let sep = cmp_mask_against_input(input, b',');
+                    let end = cmp_mask_against_input(input, b'\n');
+                    
+                    fields[b] = (end | sep) & !quote_mask;
+                }
+                
+                // Flatten all buffered results
+                for b in 0..BUFFER_SIZE {
+                    let internal_idx = 64 * b + idx;
+                    flatten_bits(pcsv, internal_idx as u32, fields[b]);
+                }
+                
+                idx += 64 * BUFFER_SIZE;
+            }
+        }
+        
         while idx < lenminus64 {
             let input = fill_input(buf.as_ptr().add(idx));
             let quote_mask = find_quote_mask(input, &mut prev_iter_inside_quote);
